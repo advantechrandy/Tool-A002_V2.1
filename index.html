@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系統進出風開孔率性能計算</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap');
+
+        body {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            font-family: 'JetBrains+Mono', 'Noto+Sans+TC', sans-serif;
+        }
+
+        .industrial-card {
+            background: #262626;
+            border: 1px solid #3f3f3f;
+            box-shadow: 4px 4px 0px #000;
+        }
+
+        .industrial-input {
+            background: #121212;
+            border: 1px solid #4a4a4a;
+            color: #00ff41;
+            padding: 8px;
+            width: 100%;
+            outline: none;
+        }
+
+        .industrial-input:focus {
+            border-color: #00ff41;
+        }
+
+        .btn-calculate {
+            background: #4a4a4a;
+            color: white;
+            padding: 10px 20px;
+            border: 1px solid #666;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-calculate:hover {
+            background: #00ff41;
+            color: #000;
+            border-color: #000;
+        }
+
+        .tab-btn {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab-btn.active {
+            border-bottom: 2px solid #00ff41;
+            color: #00ff41;
+            background: rgba(0, 255, 65, 0.05);
+        }
+
+        .label-text {
+            color: #aaa;
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        canvas {
+            background: #1a1a1a;
+        }
+
+        .formula-block {
+            background: #121212;
+            padding: 1rem;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            margin: 1rem 0;
+            color: #00ff41;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-6 border-b border-gray-700 pb-4 flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tighter text-white">FAN PERFORMANCE & PERFORATION ANALYZER V2.1</h1>
+                <p class="text-gray-500 text-sm">CREATOR: RANDY CHEN</p>
+            </div>
+            <nav class="flex gap-2">
+                <div id="tab-calc" class="tab-btn active font-bold" onclick="switchTab('calc')">計算器界面</div>
+                <div id="tab-theory" class="tab-btn font-bold" onclick="switchTab('theory')">公式與來源</div>
+            </nav>
+        </header>
+
+        <!-- 分頁 1: 計算器 -->
+        <div id="view-calc" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- 輸入面板 -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="industrial-card p-6">
+                    <h2 class="text-lg font-bold mb-4 border-l-4 border-green-500 pl-2">輸入參數 INPUT</h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="label-text">風扇 PQ 數據 (CFM, Static Pressure inH2O)</label>
+                            <textarea id="pqData" class="industrial-input h-32 text-xs" placeholder="格式: CFM,Pressure (每行一筆)&#10;0,0.8&#10;10,0.7&#10;20,0.55&#10;30,0.35&#10;40,0"></textarea>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="label-text">進風開孔率 (%)</label>
+                                <input type="number" id="inletRatio" class="industrial-input" value="60">
+                            </div>
+                            <div>
+                                <label class="label-text">出風開孔率 (%)</label>
+                                <input type="number" id="outletRatio" class="industrial-input" value="60">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="label-text">進風面積 (mm²)</label>
+                                <input type="number" id="areaIn" class="industrial-input" value="14400">
+                            </div>
+                            <div>
+                                <label class="label-text">出風面積 (mm²)</label>
+                                <input type="number" id="areaOut" class="industrial-input" value="14400">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="label-text">進風間隙 Gap (mm)</label>
+                                <input type="number" id="gap" class="industrial-input" value="5" min="0">
+                            </div>
+                            <div>
+                                <label class="label-text">機殼厚度 (mm)</label>
+                                <input type="number" id="thickness" class="industrial-input" value="1.2">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="label-text">空氣密度 (kg/m³)</label>
+                            <input type="number" id="rho" class="industrial-input" value="1.204" step="0.001">
+                        </div>
+
+                        <button onclick="calculate()" class="btn-calculate w-full mt-4 font-bold">執行模擬計算</button>
+                    </div>
+                </div>
+
+                <div class="industrial-card p-6">
+                    <h2 class="text-lg font-bold mb-4 border-l-4 border-yellow-500 pl-2">計算結果 SUMMARY</h2>
+                    <div id="results" class="space-y-2 text-sm">
+                        <div class="flex justify-between"><span>原始最大風量:</span> <span id="maxAirflow" class="text-white">-</span></div>
+                        <div class="flex justify-between"><span>原始最大靜壓:</span> <span id="maxPressure" class="text-white">-</span></div>
+                        <div class="flex justify-between border-t border-gray-700 pt-2 mt-2 font-bold text-green-400">
+                            <span>系統工作點 (OP):</span> <span id="operatingPoint">-</span>
+                        </div>
+                        <div class="flex justify-between text-red-400">
+                            <span>風量損耗率:</span> <span id="lossRate">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 圖表面板 -->
+            <div class="lg:col-span-2 space-y-6">
+                <div class="industrial-card p-6 h-full">
+                    <h2 class="text-lg font-bold mb-4 border-l-4 border-blue-500 pl-2">PQ 性能曲線圖 PERFORMANCE CHART</h2>
+                    <div class="relative h-96 w-full">
+                        <canvas id="pqChart"></canvas>
+                    </div>
+                    <div class="mt-4 p-4 bg-black bg-opacity-30 text-xs text-gray-400 leading-relaxed">
+                        <p id="calcNote">* 註：本模型考量了進出風開孔阻抗，並針對 Gap 進行流場不均勻修正。當 Gap 趨近於 0 時，進風阻抗將顯著增加。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 分頁 2: 公式說明 -->
+        <div id="view-theory" class="hidden space-y-6">
+            <div class="industrial-card p-8">
+                <h2 class="text-2xl font-bold mb-6 border-l-4 border-blue-500 pl-4 text-white">流體阻力計算與 Gap 修正模型</h2>
+                
+                <div class="space-y-6 text-gray-300 leading-relaxed">
+                    <section>
+                        <h3 class="text-lg font-bold text-green-400 mb-2">1. 系統阻抗基礎</h3>
+                        <div class="formula-block text-center">
+                            dP = (K_inlet + K_outlet) * (1/2 * &rho; * v&sup2;)
+                        </div>
+                    </section>
+
+                    <section>
+                        <h3 class="text-lg font-bold text-green-400 mb-2">2. Gap 修正係數 (Gap Correction)</h3>
+                        <p>當風扇緊貼機殼時，氣流進入葉片尖端受阻。本工具引入修正係數 C_gap：</p>
+                        <div class="formula-block">
+                            Effective K_inlet = K_theoretical * C_gap <br>
+                            其中 C_gap = 1 + (D_fan / (12 * Gap + &epsilon;))
+                        </div>
+                        <p>當 Gap 減小時，C_gap 會迅速增大，模擬出緊貼機殼時性能急劇下降的物理現象（通常 Gap &lt; 3mm 影響最顯著）。</p>
+                    </section>
+
+                    <section class="p-4 bg-yellow-900 bg-opacity-20 border border-yellow-800">
+                        <h3 class="text-lg font-bold text-yellow-500 mb-2">3. 工程實務建議</h3>
+                        <ul class="list-disc ml-6 space-y-2 text-sm">
+                            <li><span class="text-white font-bold">理想距離：</span> 建議 Gap &ge; 5mm 或風扇直徑的 10%。</li>
+                            <li><span class="text-white font-bold">噪音影響：</span> Gap = 0 會引發葉片通過頻率 (BPF) 噪音，通常比有間隙時高出 5-10 dB。</li>
+                            <li><span class="text-white font-bold">修正極限：</span> 當 Gap 設為 0 時，程式內部會以 0.5mm 作為最小值計算以避免公式除零錯誤，並給予極大阻抗懲罰。</li>
+                        </ul>
+                    </section>
+
+                    <section class="border-t border-gray-700 pt-4 text-xs text-gray-500">
+                        <p>參考來源：Idelchik, I. E. / Bleier, F. P., "Fan Handbook: Selection, Application, and Design".</p>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('contextmenu', event => event.preventDefault());
+
+        let chart = null;
+
+        // 初始化範例數據
+        document.getElementById('pqData').value = "0,0.85\n10,0.78\n20,0.68\n30,0.52\n40,0.32\n50,0.12\n55,0";
+
+        function switchTab(tab) {
+            const calcView = document.getElementById('view-calc');
+            const theoryView = document.getElementById('view-theory');
+            const calcBtn = document.getElementById('tab-calc');
+            const theoryBtn = document.getElementById('tab-theory');
+
+            if (tab === 'calc') {
+                calcView.classList.remove('hidden');
+                theoryView.classList.add('hidden');
+                calcBtn.classList.add('active');
+                theoryBtn.classList.remove('active');
+            } else {
+                calcView.classList.add('hidden');
+                theoryView.classList.remove('hidden');
+                calcBtn.classList.remove('active');
+                theoryBtn.classList.add('active');
+            }
+        }
+
+        function calculate() {
+            const rawData = document.getElementById('pqData').value;
+            const inletRatio = parseFloat(document.getElementById('inletRatio').value) / 100;
+            const outletRatio = parseFloat(document.getElementById('outletRatio').value) / 100;
+            const areaInMm2 = parseFloat(document.getElementById('areaIn').value);
+            const areaOutMm2 = parseFloat(document.getElementById('areaOut').value);
+            const gap = parseFloat(document.getElementById('gap').value);
+            const rho = parseFloat(document.getElementById('rho').value);
+
+            const areaInM2 = areaInMm2 / 1000000;
+            const areaOutM2 = areaOutMm2 / 1000000;
+
+            const fanCurve = rawData.split('\n')
+                .map(line => line.split(',').map(v => parseFloat(v.trim())))
+                .filter(p => p.length === 2 && !isNaN(p[0]) && !isNaN(p[1]))
+                .sort((a, b) => a[0] - b[0]);
+
+            if (fanCurve.length < 2) {
+                alert("請輸入有效的 PQ 數據");
+                return;
+            }
+
+            // 理論 K 係數 (Idelchik)
+            const getK = (sigma) => {
+                if (sigma <= 0) return 999999;
+                if (sigma >= 1) return 0.1;
+                return Math.pow((1 / (0.707 * Math.sqrt(1 - sigma) + sigma) - 1), 2) + Math.pow((1 - sigma), 2) / Math.pow(sigma, 2);
+            };
+            
+            let kIn = getK(inletRatio);
+            const kOut = getK(outletRatio);
+
+            // Gap 修正邏輯
+            const dEquiv = Math.sqrt(4 * areaInMm2 / Math.PI);
+            const safeGap = Math.max(gap, 0.5); 
+            const gapCorrection = 1 + (dEquiv / (12 * safeGap));
+            kIn = kIn * gapCorrection;
+
+            const systemCurve = [];
+            const CFM_TO_M3S = 0.000471947;
+            const PA_TO_INH2O = 0.00401463;
+
+            const maxCFM = fanCurve[fanCurve.length - 1][0];
+            const steps = 50;
+
+            for (let i = 0; i <= steps; i++) {
+                const q_cfm = (maxCFM / steps) * i;
+                const dp_inh2o = getSystemP_Series(q_cfm, kIn, areaInM2, kOut, areaOutM2, rho, CFM_TO_M3S, PA_TO_INH2O);
+                systemCurve.push({ x: q_cfm, y: dp_inh2o });
+            }
+
+            let opX = 0;
+            let opY = 0;
+            for (let q = 0; q <= maxCFM; q += 0.1) {
+                const fanP = interpolate(q, fanCurve);
+                const sysP = getSystemP_Series(q, kIn, areaInM2, kOut, areaOutM2, rho, CFM_TO_M3S, PA_TO_INH2O);
+                if (sysP >= fanP) {
+                    opX = q;
+                    opY = fanP;
+                    break;
+                }
+            }
+
+            updateUI(fanCurve, opX, opY, gap);
+            renderChart(fanCurve, systemCurve, opX, opY);
+        }
+
+        function interpolate(x, curve) {
+            for (let i = 0; i < curve.length - 1; i++) {
+                if (x >= curve[i][0] && x <= curve[i+1][0]) {
+                    const t = (x - curve[i][0]) / (curve[i+1][0] - curve[i][0]);
+                    return curve[i][1] + t * (curve[i+1][1] - curve[i][1]);
+                }
+            }
+            return 0;
+        }
+
+        function getSystemP_Series(q_cfm, kIn, aIn, kOut, aOut, rho, c2m, p2i) {
+            if (q_cfm <= 0) return 0;
+            const q_m3s = q_cfm * c2m;
+            const vIn = q_m3s / aIn;
+            const vOut = q_m3s / aOut;
+            const dpIn = kIn * 0.5 * rho * Math.pow(vIn, 2);
+            const dpOut = kOut * 0.5 * rho * Math.pow(vOut, 2);
+            return (dpIn + dpOut) * p2i;
+        }
+
+        function updateUI(fanCurve, opX, opY, gap) {
+            const maxCFM = fanCurve[fanCurve.length - 1][0];
+            const maxP = Math.max(...fanCurve.map(p => p[1]));
+
+            document.getElementById('maxAirflow').innerText = maxCFM.toFixed(2) + " CFM";
+            document.getElementById('maxPressure').innerText = maxP.toFixed(3) + " inH2O";
+            document.getElementById('operatingPoint').innerText = `${opX.toFixed(2)} CFM @ ${opY.toFixed(3)} inH2O`;
+            
+            const loss = ((maxCFM - opX) / maxCFM * 100).toFixed(1);
+            document.getElementById('lossRate').innerText = `-${loss}%`;
+
+            const note = document.getElementById('calcNote');
+            if (gap < 3) {
+                note.innerHTML = `<span class="text-red-500 font-bold">警告：Gap (${gap}mm) 過小，將產生顯著的不均勻入流損耗與 BPF 噪音。</span>`;
+            } else {
+                note.innerText = `* 註：本模型考量了進出風開孔阻抗，並針對 Gap (${gap}mm) 進行流場不均勻修正。`;
+            }
+        }
+
+        function renderChart(fanCurve, systemCurve, opX, opY) {
+            const ctx = document.getElementById('pqChart').getContext('2d');
+            if (chart) chart.destroy();
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Fan PQ Curve (原始)',
+                            data: fanCurve.map(p => ({ x: p[0], y: p[1] })),
+                            borderColor: '#00ff41',
+                            borderWidth: 3,
+                            fill: false,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'System Resistance (含 Gap 損耗)',
+                            data: systemCurve,
+                            borderColor: '#ff4141',
+                            borderDash: [5, 5],
+                            borderWidth: 2,
+                            fill: false,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Operating Point',
+                            data: [{ x: opX, y: opY }],
+                            backgroundColor: '#fff',
+                            borderColor: '#fff',
+                            pointRadius: 6,
+                            showLine: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { type: 'linear', title: { display: true, text: 'Airflow (CFM)', color: '#aaa' }, grid: { color: '#333' }, ticks: { color: '#888' } },
+                        y: { title: { display: true, text: 'Static Pressure (inH2O)', color: '#aaa' }, grid: { color: '#333' }, ticks: { color: '#888' }, beginAtZero: true }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#ccc', font: { family: 'JetBrains Mono' } } }
+                    }
+                }
+            });
+        }
+
+        window.onload = calculate;
+    </script>
+</body>
+</html>
